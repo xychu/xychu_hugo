@@ -7,134 +7,136 @@ draft: true
 
 # Tensorflow 分布式训练的各种玩儿法 - 蹭 1.8 的热度
 
-Tensorflow 1.8 发布了！ 保持着差不多一个月一个版本，够可以的！完整 Release Note 请移步 [Github](https://github.com/tensorflow/tensorflow/releases/tag/v1.8.0)。
+Tensorflow 1.8 发布了！ 保持着差不多一个月一个版本，够可以的！
+完整 Release Note 请移步 [Github](https://github.com/tensorflow/tensorflow/releases/tag/v1.8.0)。
 
 抛开 Tensorflow Lite 不说，我特别关心的是这一条：
 
-> Can now pass `tf.contrib.distribute.MirroredStrategy()` to `tf.estimator.RunConfig()` to run an `Estimator` model on multiple GPUs on one machine
+> Can now pass `tf.contrib.distribute.MirroredStrategy()` to `tf.estimator.RunConfig()`
+to run an `Estimator` model on multiple GPUs on one machine
 
-解读下：TF 进一步抽象的高层（high level） API `Estimator` 通过 `MirroredStrategy()` 支持单机多卡分布式了（In-graph replication, all-reduce synchronous）。我们有理由相信，后面应该会有更多的分布式策略被支持，多节点，异步，甚至模型并行。
+解读下：TF 高层（high level） API `Estimator` 通过 `MirroredStrategy()`
+支持单机多卡分布式了（In-graph replication, all-reduce synchronous）。
+我们有理由相信，后面应该会有更多的分布式策略被支持，多节点，异步，模型并行等。
 
-而我们的目标呢，基于目前的机房建设在某些场景下肯定是多机多卡才够劲儿。 所以，今天就简单总结下，我接触 Tensorflow 以来了解到的分布式训练的各种玩儿法，以及接下来会继续跟进的几个方向。
+而我们的目标呢，在某些场景下基于目前的机房建设肯定是多机多卡才够劲儿。
+所以，今天就简单总结下，我了解的 Tensorflow 分布式训练的各种玩儿法，以及接下来会继续跟进的几个方向。
 
 ## 经典 ps & worker 模式
 
-During the project development lifecycle, there will be two branches that are almost always there  and be used often. Also, they carry  all the release tags.
+假定大家对 Tensorflow 的一些基本[概念][tf_intro]及[架构][tf_arch]已经有所了解，在开始介绍经典模式之前，
+只简单介绍下分布式涉及到的一些重点概念及策略对比：
 
-![master_release_branches](../../images/master_release.png)
+- 模型并行 vs 数据并行
 
-### `master( or develop)` branch
+    模型并行：模型的各个部分并行于多个计算设备上；适应场景大模型，单个设备容不下；或者模型本身有比较好的并行性；
 
-We consider `origin/master` to be the main branch where the source code of `HEAD` always reflects a state with the latest delivered development changes for the next release. Some would call this the “integration branch”. This is where any automatic nightly builds are built from.
+    数据并行：多个模型副本分别处理不同的训练数据，以提高整体吞吐量；是常见的分布式训练策略；
 
-**NOTE:** It's better not to commit directly onto your local `master` branch, try to use feature branch instead. Keep a clean local `master` will give you strong confident to get changes from remote by `rebase` or even just `pull` `origin/master`, also save your time in case your changes conflict with others. But if you're a git expert and you know exactly where you're and what you're doing, that's another story :-)
+- `in-graph` replication vs `between-graph` replication
 
-### `release` branch
+    `in-graph`: 图内复制，只构建一个 client 并把包含所有的 `worker` 设备都在定义一个图中，
+    如果 worker 节点及设备过多，计算图过大会导致性能下降；而且只构建一个 client，分发数据的效率以及容错性都不好；
 
-We consider `origin/release` to be the main branch where the source code of `HEAD` always reflects a `deploy-ready` state, including `release-candidate`.
+    `between-graph`: 图间复制，每个 `worker` 都初始化一个计算图副本， 通过 `ps`( parameter server) 
+    共享变量参数，只需要更新参数，免除了数据分发环节，在规模较大的情况下，相比 `in-graph` 提高了训练并行效率；
 
-When the source code in the `master` branch reaches a stable point and is ready to be released, all of the changes should be merged  into `release`  and then tagged with a release number.
+- 同步训练 vs 异步训练
 
-Normally, it's shoud be  one release candidate with a  `rc` tag and deploy onto the  `stage` environment. During the test or verify stage, all release related commits, including bug-fixes, should be landed on the `release` branch **only**.
+    同步训练：每一次梯度更新，需要等所有的 `worker` 处理完待训练数据后，先做聚会处理后再更新参数；
+    优势是 loss 下降稳定；劣势是每一步的处理速度都取决于最慢的那个 `worker`；
 
-Therefore, when we decide it is production ready, we can bump version to a normal release, add tag and merge back into `master`.
+    异步训练：各个 `worker` 的计算及模型更新都是相互独立的，没有统一控制；
+    优势是速度，优化计算资源利用率；劣势是 loss 下降不稳定；
 
-**NOTE:** We use `release` branch to do the release procedure, including tests or verifications which may take days long, so the development that did not related or targeted to this release will keep moving forward on `master` branch. That's the point of using branches to keep developing parallelized.
+
+### 集群描述 `tf.train.ClusterSpec`
+
+```python
+tf.train.ClusterSpec({
+    "worker": [
+        "worker0.example.com:2222",
+        "worker1.example.com:2222",
+        "worker2.example.com:2222"
+    ],
+    "ps": [
+        "ps0.example.com:2222",
+        "ps1.example.com:2222"
+    ]})
+
+# 其中， "ps" 及 "worker" 为 `job_name`, 还需要 `task_index` 来创建具体的 `tf.train.Server` 实例。
+```
+
+### 实践中需要留意的点
+
+- 同步还是异步的选择
+- `ps` 和 `worker` 的数目比例
+- `ps` 带宽占用过高时，`ps` 及 `worker` 的调度策略
+- 分布式训练的状态机定义，包括终止态定义，以及有`worker` 训练失败后，是否支持重启训练等
+
+## 高层 `Estimator` API
+
+### 集群描述 `TF_CONFIG` 环境变量
+
+非 chief 节点：
+```python
+  cluster = {'chief': ['host0:2222'],
+             'ps': ['host1:2222', 'host2:2222'],
+             'worker': ['host3:2222', 'host4:2222', 'host5:2222']}
+  os.environ['TF_CONFIG'] = json.dumps(
+      {'cluster': cluster,
+       'task': {'type': 'worker', 'index': 1}})
+  config = RunConfig()
+  assert config.master == 'host4:2222'
+  assert config.task_id == 1
+  assert config.num_ps_replicas == 2
+  assert config.num_worker_replicas == 4
+  assert config.cluster_spec == server_lib.ClusterSpec(cluster)
+  assert config.task_type == 'worker'
+  assert not config.is_chief
+```
+chief 节点：
+```python
+  cluster = {'chief': ['host0:2222'],
+             'ps': ['host1:2222', 'host2:2222'],
+             'worker': ['host3:2222', 'host4:2222', 'host5:2222']}
+  os.environ['TF_CONFIG'] = json.dumps(
+      {'cluster': cluster,
+       'task': {'type': 'chief', 'index': 0}})
+  config = RunConfig()
+  assert config.master == 'host0:2222'
+  assert config.task_id == 0
+  assert config.num_ps_replicas == 2
+  assert config.num_worker_replicas == 4
+  assert config.cluster_spec == server_lib.ClusterSpec(cluster)
+  assert config.task_type == 'chief'
+  assert config.is_chief
+```
 
 ## All-reduce
 
-It's always okay and recommended to create personal or feature branches, just remember to delete them when they've got merged or retired.
+### 单机多卡 `Estimator` + `tf.contrib.distribute.MirroredStrategy()`
 
-And when bug or something bad happend on production environment, we need to do a hot-fix, this is the time we should use a `hotfix-<target_release_tag>` branch.
-
-### personal or feature branch
-
-Normally branch off from:
-	 `master`
-Must merge back into:
-	`master`
-Common steps:
-```bash
-# keep up-to-date with remote master
-git fetch origin && git rebase --onto=master origin/master
-# create feature branch,
-git checkout -b myfeature master
-# hack, hack, hack
-...
-# push to remote and create a pull request or merge request or a code review
-git push origin myfeature
-```
-
-### hotfix branch
-
-Must branch off from:
-	`<target_release_tag>`
-Must merge back into:
-	`release` and `master`
-Branch naming convention:
-	`hotfix-<target_release_tag>`
-Common steps:
-```bash
-# keep up-to-date with remote master
-git fetch origin
-# create hotfix branch,
-git checkout -b hotfix-<buggy_release_tag> <buggy_release_tag>
-# hot fix
-...
-# git tag and merge back to release and master after a quick verification on the fixes
-git tag -a -m "[hotfix]: xxxx" <buggy_release_tag>-hotfix
-git push origin hotfix-<buggy_release_tag>
-# push hotfix git tag
-git push origin <buggy_release_tag>-hotfix
-```
-
-![hotfix_branch](../../images/master_release_hotfix.png)
-
-## horovod
-
-* make sure all targetd feature commits have landed into the `master` branch
-
-```bash
-git fetch origin && git rebase --goto=master origin/master
-```
-
-* merge them into the `release` branch
-
-```bash
-git checkout release
-git rebase master
-# or
-git rebase --goto=release master
-```
-
-* tag with release candidate tag(optional)
-
-```bash
-git tag -a -m "[rc]: xxxx" <release_tag>-rc
-```
-
-* deploy to test/stage environment
-* merge release related commits if any
-* when it's ready to become a normal release, add release tag
-
-```bash
-git tag -a -m "[release]: xxxx" <release_tag>
-```
-
-* merge back into `master` along with tag
-
-```bash
-# push release to remote, merge it back to master via PR or merge request or code review tool
-git push origin release
-git push origin <release_tag>
-```
-
-* deploy production environment with release tag
+### 多机多卡 [Horovod](https://github.com/uber/horovod) (From Uber)
 
 
-## More
+
+## Distributed Tensorflow on Kubernetes
+
+
+## 总结
+
+
 
 
 ## Refs:
-* http://nvie.com/posts/a-successful-git-branching-model/
-* https://github.com/nicoespeon/gitgraph.js
+* https://zhuanlan.zhihu.com/p/35083779 "分布式 TensorFlow 入门教程"
+* https://zhuanlan.zhihu.com/p/34172340 "【第一期】AI Talk：TensorFlow 分布式训练的线性加速实践"
+* https://www.oreilly.com/ideas/distributed-tensorflow
+* http://download.tensorflow.org/paper/whitepaper2015.pdf
+* https://www.usenix.org/system/files/conference/osdi16/osdi16-abadi.pdf
+* https://arxiv.org/pdf/1708.02637.pdf
+
+
+[tf_intro]: https://www.tensorflow.org/programmers_guide/low_level_intro
+[tf_arch]: https://www.tensorflow.org/extend/architecture
