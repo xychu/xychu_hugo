@@ -33,22 +33,36 @@ to run an `Estimator` model on multiple GPUs on one machine
 
     数据并行：多个模型副本分别处理不同的训练数据，以提高整体吞吐量；是常见的分布式训练策略；
 
+    ![data_parallelism](../images/data_paralle.jpg)
+
 - `in-graph` replication vs `between-graph` replication
 
     `in-graph`: 图内复制，只构建一个 client 并把包含所有的 `worker` 设备都在定义一个图中，
     如果 worker 节点及设备过多，计算图过大会导致性能下降；而且只构建一个 client，分发数据的效率以及容错性都不好；
 
     `between-graph`: 图间复制，每个 `worker` 都初始化一个计算图副本， 通过 `ps`( parameter server) 
-    共享变量参数，只需要更新参数，免除了数据分发环节，在规模较大的情况下，相比 `in-graph` 提高了训练并行效率；
+    共享变量参数，只需要更新参数，免除了数据分发环节，在规模较大的情况下，相比 `in-graph` 提高了训练并行效率和容错性；
 
 - 同步训练 vs 异步训练
 
-    同步训练：每一次梯度更新，需要等所有的 `worker` 处理完待训练数据后，先做聚会处理后再更新参数；
+    同步训练：每一次梯度更新，需要等所有的 `worker` 处理完待训练数据，先做聚会处理后再更新参数；
     优势是 loss 下降稳定；劣势是每一步的处理速度都取决于最慢的那个 `worker`；
 
     异步训练：各个 `worker` 的计算及模型更新都是相互独立的，没有统一控制；
     优势是速度，优化计算资源利用率；劣势是 loss 下降不稳定；
 
+    ![sync_vs_async](../images/tf_sync_async.png)
+
+因为`数据同步`相比较`模型同步`具有更普适的应用场景，所以针对`数据同步`的分布式训练的支持也就更适合作为 Tensorflow 通用特性来在框架级支持。
+
+而源于 `DistBelief` 的基于 `ps` 和 `worker` 分布式训练架构在 Tensorflow 很早的版本中便提供了支持，这也就是这里称之为 `经典` 模式的原因。
+
+在 Tensorflow 的 `ps` 和 `worker` 模式下，`in-graph` 和 `between-graph` replication 都有支持，但是基于性能和实用性考虑，可能 `between-graph` 使用的更多一些，`同步`和`异步`则更多的是根据模型的实际效果以及项目的具体需求来选择。
+
+
+### 具体样例
+
+官方上手指南：[Distributed Tensorflow](https://www.tensorflow.org/deploy/distributed)
 
 ### 集群描述 `tf.train.ClusterSpec`
 
@@ -70,9 +84,9 @@ tf.train.ClusterSpec({
 ### 实践中需要留意的点
 
 - 同步还是异步的选择
-- `ps` 和 `worker` 的数目比例
+- `ps` 和 `worker` 的个数比率的调整
 - `ps` 带宽占用过高时，`ps` 及 `worker` 的调度策略
-- 分布式训练的状态机定义，包括终止态定义，以及有`worker` 训练失败后，是否支持重启训练等
+- 分布式训练的状态机定义，包括终止态定义，以及当有 `worker` 训练失败后，是否支持重启训练等
 
 ## 高层 `Estimator` API
 
