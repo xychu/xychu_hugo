@@ -24,6 +24,8 @@ to run an `Estimator` model on multiple GPUs on one machine
 
 ## 经典 ps & worker 模式
 
+<img src="../../images/ps_worker_arch.png" alt="ps_worker_arch" style="width: 1000px;"/>
+
 假定大家对 Tensorflow 的一些基本[概念][tf_intro]及[架构][tf_arch]已经有所了解，在开始介绍经典模式之前，
 只简单介绍下分布式涉及到的一些重点概念及策略对比：
 
@@ -33,14 +35,14 @@ to run an `Estimator` model on multiple GPUs on one machine
 
     数据并行：多个模型副本分别处理不同的训练数据，以提高整体吞吐量；是常见的分布式训练策略；
 
-    ![data_parallelism](../images/data_paralle.jpg)
+    <img src="../../images/data_paralle.jpg" alt="data_parallelism" style="width: 600px;"/>
 
 - `in-graph` replication vs `between-graph` replication
 
     `in-graph`: 图内复制，只构建一个 client 并把包含所有的 `worker` 设备都在定义一个图中，
     如果 worker 节点及设备过多，计算图过大会导致性能下降；而且只构建一个 client，分发数据的效率以及容错性都不好；
 
-    `between-graph`: 图间复制，每个 `worker` 都初始化一个计算图副本， 通过 `ps`( parameter server) 
+    `between-graph`: 图间复制，每个 `worker` 都初始化一个计算图副本， 通过 `ps`( parameter server)
     共享变量参数，只需要更新参数，免除了数据分发环节，在规模较大的情况下，相比 `in-graph` 提高了训练并行效率和容错性；
 
 - 同步训练 vs 异步训练
@@ -51,7 +53,7 @@ to run an `Estimator` model on multiple GPUs on one machine
     异步训练：各个 `worker` 的计算及模型更新都是相互独立的，没有统一控制；
     优势是速度，优化计算资源利用率；劣势是 loss 下降不稳定；
 
-    ![sync_vs_async](../images/tf_sync_async.png)
+    <img src="../../images/tf_sync_async.png" alt="sync_vs_async" style="width: 600px;"/>
 
 因为`数据同步`相比较`模型同步`具有更普适的应用场景，所以针对`数据同步`的分布式训练的支持也就更适合作为 Tensorflow 通用特性来在框架级支持。
 
@@ -60,11 +62,9 @@ to run an `Estimator` model on multiple GPUs on one machine
 在 Tensorflow 的 `ps` 和 `worker` 模式下，`in-graph` 和 `between-graph` replication 都有支持，但是基于性能和实用性考虑，可能 `between-graph` 使用的更多一些，`同步`和`异步`则更多的是根据模型的实际效果以及项目的具体需求来选择。
 
 
-### 具体样例
-
-官方上手指南：[Distributed Tensorflow](https://www.tensorflow.org/deploy/distributed)
-
 ### 集群描述 `tf.train.ClusterSpec`
+
+参考：[Distributed Tensorflow](https://www.tensorflow.org/deploy/distributed)
 
 ```python
 tf.train.ClusterSpec({
@@ -81,6 +81,19 @@ tf.train.ClusterSpec({
 # 其中， "ps" 及 "worker" 为 `job_name`, 还需要 `task_index` 来创建具体的 `tf.train.Server` 实例。
 ```
 
+__注：__ 可以通过脚步或者借助调度框架来动态构建 `ClusterSpec`。
+
+### server protocols
+
+* Default `grpc`
+* Verbs based RDMA with `grpc+verbs`: https://github.com/tensorflow/tensorflow/tree/v1.8.0/tensorflow/contrib/verbs
+* MPI with `grpc+mpi`: https://github.com/tensorflow/tensorflow/tree/v1.8.0/tensorflow/contrib/mpi
+* GPU Direct RDMA with `grpc+gdr`: https://github.com/tensorflow/tensorflow/tree/v1.8.0/tensorflow/contrib/gdr
+
+```python
+server = tf.train.Server(cluster, job_name="local", task_index=0, protocol='grpc+gdr') # default protocol is 'grpc'
+```
+
 ### 实践中需要留意的点
 
 - 同步还是异步的选择
@@ -88,44 +101,47 @@ tf.train.ClusterSpec({
 - `ps` 带宽占用过高时，`ps` 及 `worker` 的调度策略
 - 分布式训练的状态机定义，包括终止态定义，以及当有 `worker` 训练失败后，是否支持重启训练等
 
-## 高层 `Estimator` API
+## 高层 API (`Estimator`, `Experiment` 以及 `Dataset`)
+
+<img src="../../images/tf_high_level_all.png" alt="tf_high_level" style="width: 600px;"/>
+
+`Estimator` 介绍，xxx xxx
+
+<img src="../../images/estimator_interface.png" alt="estimator_interface" style="width: 800px;"/>
+
+`Experiment` 介绍，xxx xxx
+
+<img src="../../images/experiment_interface.png" alt="experiment_interface" style="width: 600px;"/>
+
+`Dataset` 介绍，xxx xxx
+
+- `class Dataset`: Represents a potentially large set of elements.
+- `class FixedLengthRecordDataset`: A `Dataset` of fixed-length records from one or more binary files.
+- `class Iterator`: Represents the state of iterating through a `Dataset`.
+- `class TFRecordDataset`: A `Dataset` comprising records from one or more TFRecord files.
+- `class TextLineDataset`: A `Dataset` comprising lines from one or more text files.
+
+
 
 ### 集群描述 `TF_CONFIG` 环境变量
 
-非 chief 节点：
+参考：[CIFAR-10 Estimator](https://github.com/tensorflow/models/tree/master/tutorials/image/cifar10_estimator)
+
 ```python
-  cluster = {'chief': ['host0:2222'],
-             'ps': ['host1:2222', 'host2:2222'],
-             'worker': ['host3:2222', 'host4:2222', 'host5:2222']}
-  os.environ['TF_CONFIG'] = json.dumps(
-      {'cluster': cluster,
-       'task': {'type': 'worker', 'index': 1}})
-  config = RunConfig()
-  assert config.master == 'host4:2222'
-  assert config.task_id == 1
-  assert config.num_ps_replicas == 2
-  assert config.num_worker_replicas == 4
-  assert config.cluster_spec == server_lib.ClusterSpec(cluster)
-  assert config.task_type == 'worker'
-  assert not config.is_chief
+cluster = {'master': ['master-ip:8000'],
+           'ps': ['ps-ip:8000'],
+           'worker': ['worker-ip:8000']}
+
+TF_CONFIG = json.dumps(
+  {'cluster': cluster,
+   'task': {'type': master, 'index': 0},
+   'model_dir': 'gs://<bucket_path>/<dir_path>',
+   'environment': 'cloud'
+  })
 ```
-chief 节点：
-```python
-  cluster = {'chief': ['host0:2222'],
-             'ps': ['host1:2222', 'host2:2222'],
-             'worker': ['host3:2222', 'host4:2222', 'host5:2222']}
-  os.environ['TF_CONFIG'] = json.dumps(
-      {'cluster': cluster,
-       'task': {'type': 'chief', 'index': 0}})
-  config = RunConfig()
-  assert config.master == 'host0:2222'
-  assert config.task_id == 0
-  assert config.num_ps_replicas == 2
-  assert config.num_worker_replicas == 4
-  assert config.cluster_spec == server_lib.ClusterSpec(cluster)
-  assert config.task_type == 'chief'
-  assert config.is_chief
-```
+
+### 实践中需要留意的点
+
 
 ## All-reduce
 
@@ -150,7 +166,8 @@ chief 节点：
 * http://download.tensorflow.org/paper/whitepaper2015.pdf
 * https://www.usenix.org/system/files/conference/osdi16/osdi16-abadi.pdf
 * https://arxiv.org/pdf/1708.02637.pdf
-
+* https://eng.uber.com/horovod/  "Meet Horovod: Uber’s Open Source Distributed Deep Learning Framework for TensorFlow"
+* https://medium.com/onfido-tech/higher-level-apis-in-tensorflow-67bfb602e6c0 "Higher-Level APIs in TensorFlow"
 
 [tf_intro]: https://www.tensorflow.org/programmers_guide/low_level_intro
 [tf_arch]: https://www.tensorflow.org/extend/architecture
