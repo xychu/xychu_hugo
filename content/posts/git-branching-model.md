@@ -14,7 +14,7 @@ In short, use `tag` to track every releases and use `branch` to keep developing 
 
 During the project development lifecycle, there will be two branches that are almost always there  and be used often. Also, they carry  all the release tags.
 
-![master_release_branches](../../images/master_release.png)
+![master_release_branches](../../images/git-branch/master_release.png)
 
 ### `master( or develop)` branch
 
