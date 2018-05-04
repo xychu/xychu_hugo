@@ -2,7 +2,6 @@
 title: "Distributed Tensorflow and more"
 tag: ["AI", "Deep Learning", "tenforflow", "Distributed System"]
 date: 2018-04-28T23:00:36+08:00
-draft: true
 ---
 
 # Tensorflow 分布式训练的各种玩儿法 - 蹭 1.8 的热度

@@ -2,7 +2,6 @@
 title: "Git Branching Model"
 tag: ["git"]
 date: 2018-04-28T17:00:56+08:00
-draft: true
 ---
 
 # Git Project branching & releasing model
@@ -81,7 +80,7 @@ git push origin hotfix-<buggy_release_tag>
 git push origin <buggy_release_tag>-hotfix
 ```
 
-![hotfix_branch](../../images/master_release_hotfix.png)
+![hotfix_branch](../../images/git-branch/master_release_hotfix.png)
 
 ## Release procedure
 
