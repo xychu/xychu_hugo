@@ -1,6 +1,9 @@
 ---
 title: "Git Branching Model"
-tag: ["git"]
+summary: use `tag` to track every releases and use `branch` to keep developing parallelized
+topics:
+  -  git
+tags: ["git"]
 date: 2018-04-28T17:00:56+08:00
 ---
 
