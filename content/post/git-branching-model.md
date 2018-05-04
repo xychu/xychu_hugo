@@ -13,7 +13,7 @@ In short, use `tag` to track every releases and use `branch` to keep developing 
 
 During the project development lifecycle, there will be two branches that are almost always there  and be used often. Also, they carry  all the release tags.
 
-![master_release_branches](../../images/git-branch/master_release.png)
+![master_release_branches](/images/git-branch/master_release.png)
 
 ### `master( or develop)` branch
 
@@ -80,7 +80,7 @@ git push origin hotfix-<buggy_release_tag>
 git push origin <buggy_release_tag>-hotfix
 ```
 
-![hotfix_branch](../../images/git-branch/master_release_hotfix.png)
+![hotfix_branch](/images/git-branch/master_release_hotfix.png)
 
 ## Release procedure
 

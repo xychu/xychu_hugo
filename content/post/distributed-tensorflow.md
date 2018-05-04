@@ -23,7 +23,7 @@ to run an `Estimator` model on multiple GPUs on one machine
 
 ## 1. 经典 ps & worker 模式
 
-<img src="../../images/dist-tf/ps_worker_arch.png" alt="ps_worker_arch" style="width: 1000px;"/>
+<img src="/images/dist-tf/ps_worker_arch.png" alt="ps_worker_arch" style="width: 1000px;"/>
 
 假定大家对 Tensorflow 的一些基本[概念][tf_intro]及[架构][tf_arch]已经有所了解，在开始介绍经典模式之前，
 只简单介绍下分布式涉及到的一些重点概念及策略对比：
@@ -34,7 +34,7 @@ to run an `Estimator` model on multiple GPUs on one machine
 
     数据并行：多个模型副本分别处理不同的训练数据，以提高整体吞吐量；是常见的分布式训练策略；
 
-    <img src="../../images/dist-tf/data_paralle.jpg" alt="data_parallelism" style="width: 600px;"/>
+    <img src="/images/dist-tf/data_paralle.jpg" alt="data_parallelism" style="width: 600px;"/>
 
 - `in-graph` replication vs `between-graph` replication
 
@@ -52,7 +52,7 @@ to run an `Estimator` model on multiple GPUs on one machine
     异步训练：各个 `worker` 的计算及模型更新都是相互独立的，没有统一控制；
     优势是速度，优化计算资源利用率；劣势是 loss 下降不稳定；
 
-    <img src="../../images/dist-tf/tf_sync_async.png" alt="sync_vs_async" style="width: 600px;"/>
+    <img src="/images/dist-tf/tf_sync_async.png" alt="sync_vs_async" style="width: 600px;"/>
 
 因为`数据同步`相比较`模型同步`具有更普适的应用场景，所以针对`数据同步`的分布式训练的支持也就更适合作为 Tensorflow 通用特性来在框架级支持。
 
@@ -103,7 +103,7 @@ server = tf.train.Server(cluster, job_name="local", task_index=0, protocol='grpc
 ## 2. 高层 API (`Estimator` 和 `Dataset`)
 参考： [Tensorflow Estimator 2017][tf_2017] 及 https://medium.com/onfido-tech/higher-level-apis-in-tensorflow-67bfb602e6c0
 
-<img src="../../images/dist-tf/estimator_stack.png" alt="estimator_stack" style="width: 600px;"/>
+<img src="/images/dist-tf/estimator_stack.png" alt="estimator_stack" style="width: 600px;"/>
 
 > 注： `Experiment` 已经废弃了， 具体参考： [Github 文档][tf_learn]。
 
@@ -112,7 +112,7 @@ server = tf.train.Server(cluster, job_name="local", task_index=0, protocol='grpc
 
 
 `Estimator` 代表一个完整的模型。Estimator API 提供的方法包括模型的训练、评估、预测及导出。
-<img src="../../images/dist-tf/estimator_interface.png" alt="estimator_interface" style="width: 800px;"/>
+<img src="/images/dist-tf/estimator_interface.png" alt="estimator_interface" style="width: 800px;"/>
 
 > `Estimator` 具有下列优势：
 >
@@ -188,7 +188,7 @@ __注：__ 可以通过脚本或者借助调度框架来设置 `TF_CONFIG` 。
 
 参考：[【第一期】AI Talk：TensorFlow 分布式训练的线性加速实践][horovod_zhihu]
 
-<img src="../../images/dist-tf/ring_allreduce.png" alt="ring_allreduce" style="width: 800px;"/>
+<img src="/images/dist-tf/ring_allreduce.png" alt="ring_allreduce" style="width: 800px;"/>
 
 无论是经典 ps & worker 模式，还是 High Level 的 `Estimator` API，在训练集群规模和模型较大时，
 集中式的参数同步都会造成网络瓶颈。
@@ -198,9 +198,9 @@ __注：__ 可以通过脚本或者借助调度框架来设置 `TF_CONFIG` 。
 引入 Ring Allreduce 之后的拓扑变化如下：
 
 <p style="width: 1000px;">
-<img src="../../images/dist-tf/ps_worker_top.jpg" alt="ps_worker_top" style="width: 450px;"/>
+<img src="/images/dist-tf/ps_worker_top.jpg" alt="ps_worker_top" style="width: 450px;"/>
 &rarr;
-<img src="../../images/dist-tf/ring_top.jpg" alt="ring_top" style="width: 450px;"/>
+<img src="/images/dist-tf/ring_top.jpg" alt="ring_top" style="width: 450px;"/>
 </p>
 
 ### 参数更新步骤
@@ -225,15 +225,15 @@ __注：__ 可以通过脚本或者借助调度框架来设置 `TF_CONFIG` 。
 例如，第一轮迭代，第 n 个 GPU 会发送第 n 号数据块，并接收第 n-1 号数据块。经过 n-1 轮迭代，梯度数据会像图2 所示，
 每个 GPU 都包含了部分完整梯度信息。
 
-> <img src="../../images/dist-tf/scatter_reduce_1.jpg" alt="ring_top" style="width: 600px;"/>
-> <img src="../../images/dist-tf/scatter_reduce_2.jpg" alt="ring_top" style="width: 600px;"/>
+> <img src="/images/dist-tf/scatter_reduce_1.jpg" alt="ring_top" style="width: 600px;"/>
+> <img src="/images/dist-tf/scatter_reduce_2.jpg" alt="ring_top" style="width: 600px;"/>
 
 #### Allgather
  
 > 和 Scatter Reduce 阶段类似，只不过这里只拷贝不求和，最终每个GPU 都得到了所有融合后的梯度。
 
-> <img src="../../images/dist-tf/allgather_1.jpg" alt="allgather_1" style="width: 600px;"/>
-> <img src="../../images/dist-tf/allgather_2.jpg" alt="allgather_2" style="width: 600px;"/>
+> <img src="/images/dist-tf/allgather_1.jpg" alt="allgather_1" style="width: 600px;"/>
+> <img src="/images/dist-tf/allgather_2.jpg" alt="allgather_2" style="width: 600px;"/>
 
 #### 这么做有什么好处呢？
 
@@ -254,7 +254,7 @@ Tensorflow 1.8 的 Release Note 说到了，单机多卡的 allreduce 可以通�
 
 对于多机多卡， 来自 Uber 的开源项目 [Horovod](https://github.com/uber/horovod) 就是一个不错的选择。
 
-<img src="../../images/dist-tf/horovod_benchmark.png" alt="horovod_benchmark" style="width: 800px;"/>
+<img src="/images/dist-tf/horovod_benchmark.png" alt="horovod_benchmark" style="width: 800px;"/>
 
 
 ## 总结
