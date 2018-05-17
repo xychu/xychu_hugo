@@ -179,7 +179,7 @@ TF_CONFIG='{
         "worker": ["host1:2222", "host2:2222", "host3:2222"],
         "ps": ["host4:2222", "host5:2222"]
     },
-    "task": {"type": "chief", "index": 0}
+    "task": {"type": "evaluator", "index": 0}
 }'
 ```
 __注：__ 可以通过脚本或者借助调度框架来设置 `TF_CONFIG` 。
@@ -267,7 +267,7 @@ Tensorflow 1.8 的 Release Note 说到了，单机多卡的 allreduce 可以通�
 
 通过从经典 `ps` `worker` 模式到 `Estimator` API 封装，再到更高效的 `Ring Allreduce` 的引入，
 可以看出随着 Deep Learning 需求的激增，训练框架也被朝着更快更强和更易用的方向推进。
-分布式训练在大规模机器学习中是最耗时间和计算资源的哪一环，如何能有效的提高分布式训练的效率，
+分布式训练在大规模机器学习中是最耗时间和计算资源的一个环节，如何能有效的提高分布式训练的效率，
 一定是各框架和 AI 平台提供方大家集中发力的一个点。
 
 Ring Allreduce 只是优化分布式训练中参数同步的一个方向，通过 Horovod 的推出，我们也确实看到了几乎逼近理想的线性扩展能力，
