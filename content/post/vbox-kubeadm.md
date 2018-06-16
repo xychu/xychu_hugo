@@ -144,6 +144,10 @@ kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=0.0
 
 > 推荐使用 `--dry-run` 来做启动前的检查，原因就是执行完 `kubeadm init` 如果发现有问题，需要先 drain node 再 delete node 之后才能 `kubeadm reset` 做清理，比较麻烦，通过 `--dry-run` 可以提前发现一些可以避免的问题。
 
+如果成功，将会看到类似下面截图的输出：
+
+![kubeadm-result](/images/vbox-kubeadm/kubeadm-result.png)
+
 ## 其他方式
 
 其实构建 k8s 集群还有很多其他的方式：
