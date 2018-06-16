@@ -68,13 +68,88 @@ CentOS 安装交互已经比较友好了，这里就不一步步说明了，重�
 
 ## `kubeadm` 创建 k8s 集群
 
+`kubeadm` 是一个 k8s 官方推出的可以用来方便的创建 kubernetes 集群的工具。
+
+具体的安装及使用的文档，建议直接参考官方说明。
+
+我这里只是把一些注意事项帮大家列出来，免得大家掉坑儿。
+
 ### 准备工作
+
+1. Disable `firewalld`
+
+    ```
+    systemcctl stop firewalld && systemctl disable firewalld
+    ```
+
+1. 安装 Docker
+
+    ```
+    yum install -y docker
+    systemctl enable docker && systemctl start docker
+    ```
+
+1. Disable Swap
+
+    ```
+    swapoff -a
+
+    # 修改 /etc/fstab 文件，注释掉 SWAP 的自动挂载，使用free -m 确认 swap 已经关闭。
+    sed -i -e '/swap/d' /etc/fstab
+
+    # swappiness 参数调整，修改 /etc/sysctl.d/k8s.conf 添加下面一行：
+    echo 'vm.swappiness=0' > /etc/sysctl.d/k8s.conf
+
+    # 执行使修改生效
+    sysctl -p /etc/sysctl.d/k8s.conf
+    ```
+
+1. Disable SELinux
+
+    ```
+    vim /etc/sysconfig/selinux
+    # 修改 SELINUX=enforcing 为 SELINUX=disabled
+    # 重启 vm
+    ```
+
+1. 配置 sysctl iptables
+
+    ```
+    cat <<EOF >  /etc/sysctl.d/k8s.conf
+    net.bridge.bridge-nf-call-ip6tables = 1
+    net.bridge.bridge-nf-call-iptables = 1
+    EOF
+    sysctl --system
+    ```
+
+1. 重启
+
+    ```
+    reboot
+    ```
 
 ### 集群初始化
 
+做好上面的准备后，就可以开始初始化集群了，命令很简单：
+
+```
+kubeadm init <args> 
+```
+
+样例：
+
+```
+kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=0.0.0.0 --node-name=192.168.56.105
+```
+
+> 推荐使用 `--dry-run` 来做启动前的检查，原因就是执行完 `kubeadm init` 如果发现有问题，需要先 drain node 再 delete node 之后才能 `kubeadm reset` 做清理，比较麻烦，通过 `--dry-run` 可以提前发现一些可以避免的问题。
+
 ## 其他方式
 
+其实构建 k8s 集群还有很多其他的方式：
 
+- 二进制直接安装，我个人认为刚接触 k8s 一定要用二进制的方式做一遍，虽然比较繁琐，但是能够获得对 k8s 各个组件配置及相互关系有一个直观感受，增进理解；
+- 源代码中的 `./hack/local-cluster-up.sh`，更适合开发及调试 k8s 本身的问题时使用，通过环境变量可以控制持久化 etcd 数据；
 
 ## Refs:
 
