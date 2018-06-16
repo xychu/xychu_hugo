@@ -146,7 +146,7 @@ kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=0.0
 
 如果成功，将会看到类似下面截图的输出：
 
-![kubeadm-result](/images/vbox-kubeadm/kubeadm-result.png)
+![kubeadm-result](/images/vbox-kubeadm/kubeadm_result.png)
 
 ## 其他方式
 
